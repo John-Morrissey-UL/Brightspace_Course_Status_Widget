@@ -6,6 +6,16 @@ Works with any Brightspace instance.
 
 ---
 
+## Screenshots
+
+**Active state**
+![Active state](screenshots/active.png)
+
+**Inactive state**
+![Inactive state](screenshots/inactive.png)
+
+---
+
 ## What it does
 
 - Shows **ACTIVE** (green) or **INACTIVE** (red) status with a lock icon
