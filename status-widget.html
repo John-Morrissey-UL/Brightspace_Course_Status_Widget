@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Course Status</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+    body { font-family: "Lato", "Segoe UI", Roboto, Arial, sans-serif; font-size: 0.65rem; line-height: 1.2; color: #202122; }
+
+    .row { display: flex; align-items: center; gap: 4px; padding: 2px; box-sizing: border-box; flex-wrap: nowrap; width: 100%; height: auto; }
+
+    .label { font-weight: 700; flex: 0 0 auto; }
+    .status { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; flex: 0 0 auto; min-width: max-content; }
+    .status-active   { color: #005335; }
+    .status-inactive { color: #b00020; }
+    .icon { width: 13px; height: 13px; flex: 0 0 13px; display: inline-block; background-color: currentColor; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-size: contain; mask-repeat: no-repeat; mask-position: center; mask-size: contain; }
+
+    #text-container { position: relative; display: inline-flex; align-items: center; }
+    #updating-text { display: none; position: absolute; left: 0; font-size: 0.5rem; color: #555; font-weight: normal; letter-spacing: 0.2px; }
+
+    .d2l-button-primary { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; font-family: inherit; font-weight: 700; font-size: 0.65rem; line-height: 1; padding: 3px 5px; border-radius: 4px; background-color: var(--d2l-color-celestine-minus-1, #004489) !important; border: 1px solid var(--d2l-color-celestine-minus-1, #004489) !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff; cursor: pointer; user-select: none; white-space: nowrap; margin: 0; }
+    .d2l-button-primary:hover:not(:disabled) { background-color: var(--d2l-color-zircon-minus-1, #003666) !important; border-color: var(--d2l-color-zircon-minus-1, #003666) !important; }
+    .d2l-button-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #1a1a1a; }
+    .d2l-button-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .d2l-spinner { display: none; flex: 0 0 auto; width: 16px; height: 16px; }
+    .d2l-spinner.spinning { display: inline-block; animation: d2l-rotate 1.4s linear infinite; }
+    @keyframes d2l-rotate { 100% { transform: rotate(360deg); } }
+    .d2l-spinner circle { fill: none; stroke: var(--d2l-color-celestine, #006fbf); stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 42, 16; animation: d2l-dash 1.4s ease-in-out infinite; }
+    @keyframes d2l-dash { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -58; } }
+  </style>
+</head><body>
+
+<div class="row" id="widget-row">
+  <span class="label">Course Status:</span>
+  <span id="status-wrap" class="status">
+    <span id="status-icon" class="icon" aria-hidden="true" style="display:none;"></span>
+    <svg xmlns="http://www.w3.org/2000/svg" id="d2l-spinner" class="d2l-spinner spinning" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg>
+    <span id="text-container">
+      <span id="main-text" role="status" aria-live="polite" aria-atomic="true">Loading…</span>
+      <span id="updating-text" aria-hidden="true">Updating...</span>
+    </span>
+  </span>
+  <button id="update-btn" class="d2l-button-primary" disabled>Update Status</button>
+</div>
+
+<script>
+(async function () {
+
+  var LP_VERSION = '1.49';
+  var ORG_UNIT   = parseInt('{OrgUnitId}', 10);
+  var PAGE_URL   = '/d2l/lp/manageCourses/course_offering_info_viewedit.d2l?ou=' + ORG_UNIT;
+
+  var ICON_LOCK_OPEN   = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 1C9.24 1 7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2H9V6c0-1.66 1.34-3 3-3 1.45 0 2.67.98 3 2.31l1.94-.53C16.44 2.75 14.38 1 12 1zm0 18c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>');
+  var ICON_LOCK_CLOSED = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>');
+
+  var statusWrap = document.getElementById('status-wrap');
+  var mainText   = document.getElementById('main-text');
+  var updateText = document.getElementById('updating-text');
+  var statusIcon = document.getElementById('status-icon');
+  var updateBtn  = document.getElementById('update-btn');
+  var spinnerEl  = document.getElementById('d2l-spinner');
+
+  var currentActive      = null;
+  var preloadedIframe    = null;
+  var iframeReadyPromise = null;
+
+  function setIcon(url) {
+    statusIcon.style.webkitMaskImage = url ? 'url("' + url + '")' : '';
+    statusIcon.style.maskImage       = url ? 'url("' + url + '")' : '';
+  }
+
+  function setStatus(text, isActive) {
+    statusIcon.style.display = 'inline-block';
+    spinnerEl.classList.remove('spinning');
+    statusWrap.style.color = '';
+    mainText.textContent = text;
+    mainText.style.visibility = 'visible';
+    updateText.style.display = 'none';
+    statusWrap.classList.remove('status-active', 'status-inactive');
+    statusWrap.classList.add(isActive ? 'status-active' : 'status-inactive');
+    setIcon(isActive ? ICON_LOCK_OPEN : ICON_LOCK_CLOSED);
+  }
+
+  function setButtonReady(isActive) {
+    updateBtn.disabled = false;
+    updateBtn.textContent = isActive ? 'Make Inactive' : 'Make Active';
+  }
+
+  function setButtonBusy() {
+    updateBtn.disabled = true;
+    statusIcon.style.display = 'none';
+    spinnerEl.classList.add('spinning');
+    mainText.style.visibility = 'hidden';
+    updateText.style.display = 'block';
+    statusWrap.classList.remove('status-active', 'status-inactive');
+    statusWrap.style.color = 'inherit';
+  }
+
+  if (!isFinite(ORG_UNIT)) { setStatus('Unavailable', false); return; }
+
+  function findActiveCheckbox(iDoc) {
+    var activeChk = null;
+    var cmPrevEl = iDoc.querySelector('input[name="d2l_controlMapPrev"]');
+    if (cmPrevEl && cmPrevEl.value) {
+      try {
+        var idMap = JSON.parse(cmPrevEl.value).ID || {};
+        var o1 = idMap['chkbx_active'];
+        if (o1) activeChk = iDoc.querySelector('input[name="' + o1 + '"]');
+      } catch(e) {}
+    }
+    if (!activeChk) {
+      var cmEl = iDoc.querySelector('input[name="d2l_controlMap"]');
+      if (cmEl && cmEl.value) {
+        try {
+          var cmArr = JSON.parse(cmEl.value);
+          var cmObj = Array.isArray(cmArr) ? cmArr[0] : cmArr;
+          var entry = cmObj['chkbx_active'];
+          var o2 = Array.isArray(entry) ? entry[0] : null;
+          if (o2) activeChk = iDoc.querySelector('input[name="' + o2 + '"]');
+        } catch(e) {}
+      }
+    }
+    if (!activeChk) activeChk = iDoc.querySelector('input[type="checkbox"][name="active"]');
+    if (!activeChk) activeChk = iDoc.querySelector('input[name="z_v"]');
+    return activeChk;
+  }
+
+  function preloadEditPage() {
+    if (preloadedIframe && preloadedIframe.parentNode) {
+      document.body.removeChild(preloadedIframe);
+    }
+    preloadedIframe = document.createElement('iframe');
+    preloadedIframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;visibility:hidden;';
+    iframeReadyPromise = new Promise(function(resolve, reject) {
+      preloadedIframe.onload = function() {
+        var attempts = 0;
+        var poll = setInterval(function() {
+          try {
+            var iDoc = preloadedIframe.contentDocument || preloadedIframe.contentWindow.document;
+            if (findActiveCheckbox(iDoc)) { clearInterval(poll); resolve(preloadedIframe); return; }
+          } catch(e) {}
+          if (++attempts >= 30) { clearInterval(poll); resolve(preloadedIframe); }
+        }, 100);
+      };
+      preloadedIframe.onerror = function() { reject(new Error('Background load failed')); };
+    });
+    document.body.appendChild(preloadedIframe);
+    preloadedIframe.src = PAGE_URL;
+  }
+
+  async function getStatusFromIframe() {
+    var iframe = await iframeReadyPromise;
+    var iDoc = iframe.contentDocument || iframe.contentWindow.document;
+    var chk = findActiveCheckbox(iDoc);
+    if (!chk) throw new Error('Active checkbox not found in edit page');
+    return chk.checked;
+  }
+
+  async function init() {
+    preloadEditPage();
+    try {
+      var res = await fetch('/d2l/api/lp/' + LP_VERSION + '/courses/' + ORG_UNIT, {
+        credentials: 'same-origin', headers: { 'Accept': 'application/json' }
+      });
+      if (res.status === 403) {
+        currentActive = await getStatusFromIframe();
+      } else {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var courseData = await res.json();
+        currentActive = !!(courseData && courseData.IsActive);
+      }
+      setStatus(currentActive ? 'ACTIVE' : 'INACTIVE', currentActive);
+      setButtonReady(currentActive);
+    } catch(e) {
+      try {
+        currentActive = await getStatusFromIframe();
+        setStatus(currentActive ? 'ACTIVE' : 'INACTIVE', currentActive);
+        setButtonReady(currentActive);
+      } catch(e2) {
+        setStatus('Unable to load', false);
+      }
+    }
+  }
+
+  init();
+
+  async function executeToggle(newActive) {
+    var iframe = await iframeReadyPromise;
+    var iDoc = iframe.contentDocument || iframe.contentWindow.document;
+
+    return new Promise(function(resolve, reject) {
+      var timer = setTimeout(function() { reject(new Error('Timed out waiting for save')); }, 20000);
+      try {
+        var activeChk = findActiveCheckbox(iDoc);
+        if (!activeChk) { clearTimeout(timer); return reject(new Error('Active checkbox not found')); }
+
+        activeChk.checked = newActive;
+
+        iframe.onload = function() {
+          clearTimeout(timer);
+          try {
+            var rDoc = iframe.contentDocument || iframe.contentWindow.document;
+            var errEl = rDoc.querySelector('.d2l-alert-danger, [class*="d2l-error"]');
+            if (errEl && errEl.textContent.trim()) {
+              reject(new Error(errEl.textContent.trim().substring(0, 80)));
+            } else {
+              var savedChk = findActiveCheckbox(rDoc);
+              resolve(savedChk ? savedChk.checked : newActive);
+            }
+          } catch(e) {
+            resolve(newActive);
+          }
+        };
+
+        var saveBtn = iDoc.querySelector('[onclick*="OnSaveButtonClick"]')
+                   || iDoc.querySelector('[onclick*="onSaveButtonClick"]')
+                   || iDoc.querySelector('input[type="submit"]')
+                   || iDoc.querySelector('button[type="submit"]')
+                   || (function() {
+                        var all = iDoc.querySelectorAll('input[type="button"], input[type="submit"], button');
+                        for (var i = 0; i < all.length; i++) {
+                          var t = (all[i].value || all[i].textContent || '').toLowerCase();
+                          if (t.indexOf('save') !== -1) return all[i];
+                        }
+                        return null;
+                      })();
+
+        if (!saveBtn) { clearTimeout(timer); return reject(new Error('Save button not found')); }
+        saveBtn.click();
+
+      } catch(e) { clearTimeout(timer); reject(e); }
+    });
+  }
+
+  updateBtn.addEventListener('click', async function() {
+    if (currentActive === null) return;
+    var newActive = !currentActive;
+    setButtonBusy();
+    try {
+      var confirmedActive = await executeToggle(newActive);
+      currentActive = (typeof confirmedActive === 'boolean') ? confirmedActive : newActive;
+      setStatus(currentActive ? 'ACTIVE' : 'INACTIVE', currentActive);
+      setButtonReady(currentActive);
+      preloadEditPage();
+    } catch(e) {
+      setStatus('Update failed', false);
+      setButtonReady(currentActive);
+      setTimeout(function() { setStatus(currentActive ? 'ACTIVE' : 'INACTIVE', currentActive); }, 4000);
+      preloadEditPage();
+    }
+  });
+
+})();
+</script>
+</body></html>
