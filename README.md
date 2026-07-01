@@ -38,6 +38,8 @@ The widget uses a hidden iframe to load the standard Brightspace course edit pag
 
 ## Setup — adding to a course homepage
 
+> **No access to the Widgets tool?** If you don't have permission to create widgets, you can instead create a new content page in the course, paste the HTML into the page source editor, and set the page to be hidden from students. Navigate to that page yourself whenever you need to toggle the status. It works identically — the widget just needs to run on a page within the same Brightspace course.
+
 ### Step 1 — Create the widget
 
 1. Go to **Admin Tools → Widgets**
